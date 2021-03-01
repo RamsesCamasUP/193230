@@ -4,7 +4,7 @@ kind: Namespace
 metadata:
   name: actividad-cs
 ---
-
+#Postgres
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -107,7 +107,7 @@ spec:
   selector:
     app: postgres-server
   ports:
-    - port: 5300
+    - port: 5500
       targetPort: 5432
   type: LoadBalancer
 ---
@@ -214,7 +214,7 @@ spec:
   selector:
     app: mysql-server
   ports:
-    - port: 5303
+    - port: 5501
       targetPort: 3306
   type: LoadBalancer
 ---
@@ -327,8 +327,116 @@ spec:
   selector:
     app: mongo-server
   ports:  
-    - port: 5302
+    - port: 5502
       targetPort: 27017
+      protocol: TCP
+  type: LoadBalancer
+---
+# Redis
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-redis-vol1
+  namespace: actividad-cs
+spec:
+  storageClassName: sc-redis
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/redis-vol1"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-redis
+  namespace: actividad-cs
+  labels:
+    app: redis-server
+spec:
+  storageClassName: sc-redis
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sc-redis
+  namespace: actividad-cs
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1 
+kind: ConfigMap 
+metadata:
+  name: cm-redis 
+  namespace: actividad-cs
+  labels:
+    app: redis-server
+data:
+  redis.password: "ramses"
+  redis.db: "redisdb"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  namespace: actividad-cs
+  labels:
+    app: redis-server
+spec:
+  selector:
+    matchLabels:
+      app: redis-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: redis-server
+    spec:
+      containers:
+      - image: redis:latest
+        name: redis-db1
+        ports:
+        - containerPort: 6379
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /data
+          name: redis-db-volume1
+        env:
+          - name: REDIS_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: cm-redis
+                key: redis.password   
+          - name: REDIS_DB
+            valueFrom:
+              configMapKeyRef:
+                name: cm-redis
+                key: redis.db
+      volumes:
+      - name: redis-db-volume1
+        persistentVolumeClaim:
+           claimName: pvc-redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: actividad-cs
+  labels:
+    app: redis-server
+spec:
+  selector:
+    app: redis-server
+  ports:  
+    - port: 5503
+      targetPort: 6379
       protocol: TCP
   type: LoadBalancer
 ---
